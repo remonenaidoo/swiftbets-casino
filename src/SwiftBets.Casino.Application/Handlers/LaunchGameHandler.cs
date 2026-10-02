@@ -18,7 +18,7 @@ public sealed record LaunchResult(LaunchStatus Status, string? SessionToken = nu
 
 /// <summary>
 /// Opens a game session. A self-excluded, cooling-off or betting-blocked player is refused, and so is everyone while
-/// the restrictions are still loading: launching fails closed.
+/// compliance cannot be asked: launching fails closed and never relies on an eventually consistent copy alone.
 /// </summary>
 public sealed partial class LaunchGameHandler(ICasinoStore store, IRestrictions restrictions, IOptions<CasinoOptions> options, TimeProvider time)
 {
@@ -30,14 +30,12 @@ public sealed partial class LaunchGameHandler(ICasinoStore store, IRestrictions 
         }
 
         var now = time.GetUtcNow();
-        if (!restrictions.IsReady)
+        switch (await restrictions.CheckAsync(punterId, now, cancellationToken))
         {
-            return new(LaunchStatus.RestrictionsUnavailable);
-        }
-
-        if (restrictions.IsCasinoRestricted(punterId, now))
-        {
-            return new(LaunchStatus.Restricted);
+            case RestrictionCheck.Restricted:
+                return new(LaunchStatus.Restricted);
+            case RestrictionCheck.Unavailable:
+                return new(LaunchStatus.RestrictionsUnavailable);
         }
 
         if (!options.Value.Providers.TryGetValue(providerId, out var provider) || string.IsNullOrEmpty(provider.LaunchBaseUrl)

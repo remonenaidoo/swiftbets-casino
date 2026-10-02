@@ -103,9 +103,8 @@ public sealed class CasinoRulesTests
 
     private sealed class Ready(bool ready) : IRestrictions
     {
-        public bool IsReady => ready;
-
-        public bool IsCasinoRestricted(Guid punterId, DateTimeOffset now) => false;
+        public Task<RestrictionCheck> CheckAsync(Guid punterId, DateTimeOffset now, CancellationToken cancellationToken) =>
+            Task.FromResult(ready ? RestrictionCheck.Clear : RestrictionCheck.Unavailable);
     }
 
     private sealed class FakeStore : ICasinoStore

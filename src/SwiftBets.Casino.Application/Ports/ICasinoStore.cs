@@ -54,9 +54,17 @@ public interface IProviderReports
 }
 
 /// <summary>Responsible-gambling state from compliance; launching is refused while it is not loaded.</summary>
+public enum RestrictionCheck
+{
+    Clear = 1,
+    Restricted = 2,
+
+    /// <summary>The authoritative state could not be read; launch must refuse rather than guess.</summary>
+    Unavailable = 3,
+}
+
 public interface IRestrictions
 {
-    bool IsReady { get; }
-
-    bool IsCasinoRestricted(Guid punterId, DateTimeOffset now);
+    /// <summary>Whether the player may play casino games right now, from compliance's authoritative state.</summary>
+    Task<RestrictionCheck> CheckAsync(Guid punterId, DateTimeOffset now, CancellationToken cancellationToken);
 }

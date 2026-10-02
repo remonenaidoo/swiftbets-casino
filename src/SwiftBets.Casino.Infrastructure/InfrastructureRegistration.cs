@@ -31,7 +31,12 @@ public static class InfrastructureRegistration
         services.AddSingleton<ICasinoStore, SqlCasinoStore>();
         services.AddScoped<IWalletPort, GrpcWalletPort>();
         services.AddCompactedState<RestrictionsChangedV1>(Topics.RestrictionsChanged);
-        services.AddSingleton<IRestrictions, CompactedRestrictions>();
+        services.AddHttpClient(ComplianceRestrictions.ClientName, (sp, http) =>
+        {
+            http.BaseAddress = new Uri(Required(configuration, "Clients:ComplianceAddress").TrimEnd('/') + "/");
+            http.Timeout = TimeSpan.FromSeconds(3);
+        });
+        services.AddSingleton<IRestrictions, ComplianceRestrictions>();
         services.AddHttpClient(HttpProviderReports.ClientName, http => http.Timeout = TimeSpan.FromSeconds(30));
         services.AddSingleton<IProviderReports, HttpProviderReports>();
         if (configuration.GetValue("Casino:Reconciliation:Enabled", true))

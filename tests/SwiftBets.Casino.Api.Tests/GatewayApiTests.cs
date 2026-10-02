@@ -87,9 +87,8 @@ public sealed class GatewayApiTests : IClassFixture<GatewayApiTests.Host>
 
     private sealed class ExcludedOne(Guid excluded) : IRestrictions
     {
-        public bool IsReady => true;
-
-        public bool IsCasinoRestricted(Guid punterId, DateTimeOffset now) => punterId == excluded;
+        public Task<RestrictionCheck> CheckAsync(Guid punterId, DateTimeOffset now, CancellationToken cancellationToken) =>
+            Task.FromResult(punterId == excluded ? RestrictionCheck.Restricted : RestrictionCheck.Clear);
     }
 
     /// <summary>A store that knows no sessions, so a correctly signed callback is answered with session_invalid.</summary>

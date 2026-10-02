@@ -21,7 +21,7 @@ public static class ProviderWalletEndpoints
         endpoints.MapPost("/providers/{providerId}/wallet/{action}", async (string providerId, string action, HttpContext context, WalletCallbackHandler handler,
             IOptions<CasinoOptions> options, CancellationToken cancellationToken) =>
         {
-            if (!Enum.TryParse<WalletAction>(action, ignoreCase: true, out var walletAction) || !Enum.IsDefined(walletAction))
+            if (!Enum.TryParse<WalletAction>(action.Replace("-", string.Empty, StringComparison.Ordinal), ignoreCase: true, out var walletAction) || !Enum.IsDefined(walletAction))
             {
                 return Results.NotFound();
             }

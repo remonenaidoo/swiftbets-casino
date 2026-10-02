@@ -2,9 +2,7 @@ using Dapper;
 using Microsoft.Data.SqlClient;
 using SwiftBets.BuildingBlocks.Testing;
 
-[assembly: AssemblyFixture(typeof(SqlServerFixture))]
-
-namespace SwiftBets.Casino.Migrator.Tests;
+namespace SwiftBets.Casino.Infrastructure.Tests;
 
 public sealed class MigratorTests(SqlServerFixture sql)
 {
@@ -18,6 +16,7 @@ public sealed class MigratorTests(SqlServerFixture sql)
         await using var connection = new SqlConnection(connectionString);
         (await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM casino.Providers WHERE Enabled = 1")).ShouldBe(2);
 
+        await connection.ExecuteAsync(Rollback("0003_reconciliation"));
         await connection.ExecuteAsync(Rollback("0002_casino"));
         (await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM sys.tables t JOIN sys.schemas s ON s.schema_id = t.schema_id WHERE s.name = 'casino'")).ShouldBe(0);
 

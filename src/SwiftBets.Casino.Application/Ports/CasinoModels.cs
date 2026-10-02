@@ -30,3 +30,16 @@ public enum WalletStatus
 }
 
 public sealed record WalletResult(WalletStatus Status, string? FailureCode, long? Available);
+
+public static class WalletModels
+{
+    public const string Seamless = "seamless";
+    public const string Transfer = "transfer";
+}
+
+/// <summary>One transaction as either side records it, for reconciliation.</summary>
+public sealed record ReportedTransaction(string ProviderTransactionId, CasinoTransactionKind Kind, long Amount);
+
+public sealed record ReconciliationRun(
+    Guid RunId, string ProviderId, DateOnly BusinessDate, long OurNet, long ProviderNet, long Drift, int MissingOnOurSide, int MissingOnProviderSide,
+    ReconciliationStatus Status, string Currency, DateTimeOffset ReconciledAt);

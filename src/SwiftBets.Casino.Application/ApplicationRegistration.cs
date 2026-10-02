@@ -10,6 +10,7 @@ public static class ApplicationRegistration
         services.AddScoped<LaunchGameHandler>();
         services.AddScoped<WalletCallbackHandler>();
         services.AddScoped<FreeSpinsHandler>();
+        services.AddScoped<ReconcileProviderHandler>();
         return services;
     }
 }

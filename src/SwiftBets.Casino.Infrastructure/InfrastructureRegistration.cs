@@ -11,6 +11,7 @@ using SwiftBets.Casino.Application;
 using SwiftBets.Casino.Application.Ports;
 using SwiftBets.Casino.Infrastructure.Compliance;
 using SwiftBets.Casino.Infrastructure.Persistence;
+using SwiftBets.Casino.Infrastructure.Reconciliation;
 using SwiftBets.Casino.Infrastructure.Wallet;
 using SwiftBets.Contracts.Compliance;
 using SwiftBets.Contracts.Messaging;
@@ -31,6 +32,12 @@ public static class InfrastructureRegistration
         services.AddScoped<IWalletPort, GrpcWalletPort>();
         services.AddCompactedState<RestrictionsChangedV1>(Topics.RestrictionsChanged);
         services.AddSingleton<IRestrictions, CompactedRestrictions>();
+        services.AddHttpClient(HttpProviderReports.ClientName, http => http.Timeout = TimeSpan.FromSeconds(30));
+        services.AddSingleton<IProviderReports, HttpProviderReports>();
+        if (configuration.GetValue("Casino:Reconciliation:Enabled", true))
+        {
+            services.AddHostedService<ReconciliationWorker>();
+        }
 
         services.AddClientCredentials(configuration);
         services.AddGrpcClient<WalletGrpc.WalletClient>((sp, grpc) => grpc.Address = new Uri(sp.GetRequiredService<IOptions<WalletOptions>>().Value.GrpcAddress))

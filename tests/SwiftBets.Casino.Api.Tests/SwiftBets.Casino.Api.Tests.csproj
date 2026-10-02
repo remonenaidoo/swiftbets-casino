@@ -9,6 +9,7 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="SwiftBets.BuildingBlocks.Testing" />
     <ProjectReference Include="../../src/SwiftBets.Casino.Gateway.Api/SwiftBets.Casino.Gateway.Api.csproj" />
+    <ProjectReference Include="../../src/SwiftBets.Casino.Simulator/SwiftBets.Casino.Simulator.csproj" Aliases="simulator" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

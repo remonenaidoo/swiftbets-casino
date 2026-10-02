@@ -4,6 +4,19 @@ public interface ICasinoStore
 {
     Task<bool> IsProviderEnabledAsync(string providerId, CancellationToken cancellationToken);
 
+    /// <summary><see cref="WalletModels.Seamless"/> or <see cref="WalletModels.Transfer"/>; null for an unknown provider.</summary>
+    Task<string?> GetWalletModelAsync(string providerId, CancellationToken cancellationToken);
+
+    /// <summary>Our transactions with a provider created in [from, to): what reconciliation compares with its report.</summary>
+    Task<IReadOnlyList<ReportedTransaction>> ListTransactionsAsync(string providerId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken);
+
+    /// <summary>Stores the run and enqueues its ProviderReconciliationV1 in one transaction.</summary>
+    Task RecordReconciliationAsync(ReconciliationRun run, CancellationToken cancellationToken);
+
+    Task<bool> HasReconciliationAsync(string providerId, DateOnly businessDate, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<ReconciliationRun>> ListReconciliationsAsync(string? providerId, int limit, CancellationToken cancellationToken);
+
     Task CreateSessionAsync(GameSession session, CancellationToken cancellationToken);
 
     Task<GameSession?> FindSessionAsync(byte[] tokenHash, CancellationToken cancellationToken);
@@ -31,6 +44,13 @@ public interface IWalletPort
     Task<WalletResult> CreditAsync(string idempotencyKey, Guid punterId, long amount, string currency, string reference, CancellationToken cancellationToken);
 
     Task<WalletResult> GetBalanceAsync(Guid punterId, CancellationToken cancellationToken);
+}
+
+/// <summary>A provider's own report of what it sent us for a business day.</summary>
+public interface IProviderReports
+{
+    /// <summary>The report, or null when the provider could not be reached or refused us.</summary>
+    Task<IReadOnlyList<ReportedTransaction>?> GetAsync(string providerId, DateOnly businessDate, CancellationToken cancellationToken);
 }
 
 /// <summary>Responsible-gambling state from compliance; launching is refused while it is not loaded.</summary>

@@ -74,6 +74,7 @@
   const rand = (minor) => 'R ' + (minor / 100).toFixed(2);
   let model = null, minBet = 100, stake = 100, rotation = 0;
 
+  // Relative on purpose: the page is served at {base}/play behind a path prefix, so 'play/spin' resolves to {base}/play/spin.
   async function post(path, body) {
     const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     return res.json();
@@ -103,7 +104,7 @@
   }
   async function start(transferIn) {
     $('error').textContent = '';
-    const r = await post('/play/start', { session, game, transferIn });
+    const r = await post('play/start', { session, game, transferIn });
     if (r.game) $('title').textContent = r.game;
     model = r.model || model; minBet = r.minBet || minBet;
     $('provider').textContent = model === 'seamless' ? 'Swift Studios · bets straight from your wallet' : 'Transfer Games · plays from a table balance';
@@ -116,7 +117,7 @@
   $('spinBtn').onclick = async () => {
     $('error').textContent = ''; $('spinBtn').disabled = true; $('result').textContent = '';
     [...$('reels').children].forEach((r) => r.classList.add('spin'));
-    const r = await post('/play/spin', { session, game, bet: stake });
+    const r = await post('play/spin', { session, game, bet: stake });
     [...$('reels').children].forEach((r) => r.classList.remove('spin'));
     $('spinBtn').disabled = false;
     if (r.status !== 'ok') return fail(r.status);
@@ -131,7 +132,7 @@
     $('result').textContent = r.win > 0 ? 'You win ' + rand(r.win) + '!' : 'No win this time';
   };
   $('cashoutBtn').onclick = async () => {
-    const r = await post('/play/cashout', { session, game });
+    const r = await post('play/cashout', { session, game });
     if (r.status !== 'ok') return fail(r.status);
     $('result').className = 'result win'; $('result').textContent = rand(r.cashedOut) + ' back in your wallet';
     $('balanceLabel').textContent = 'Wallet'; $('balance').textContent = rand(r.balance);

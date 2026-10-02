@@ -36,3 +36,32 @@ public sealed class SimulatorTests
     private static GatewayClient Client() =>
         new(new HttpClient(), Options.Create(new SimulatorOptions { GatewayAddress = "http://casino:8080", Providers = { ["sim-seamless"] = new SimulatedProvider { Secret = Secret } } }), new Faults());
 }
+
+public sealed class PlayPageTests
+{
+    private static readonly string Page = Read();
+
+    [Fact]
+    public void The_page_calls_its_endpoints_relative_to_where_it_is_served()
+    {
+        Page.ShouldContain("post('play/start'");
+        Page.ShouldContain("post('play/spin'");
+        Page.ShouldContain("post('play/cashout'");
+    }
+
+    [Fact]
+    public void The_page_never_calls_a_root_path_or_another_origin()
+    {
+        Page.ShouldNotContain("'/play");
+        Page.ShouldNotContain("http://");
+        Page.ShouldNotContain("https://");
+        Page.ShouldNotContain("window.top");
+        Page.ShouldNotContain("window.open");
+    }
+
+    private static string Read()
+    {
+        using var stream = typeof(Faults).Assembly.GetManifestResourceStream("SwiftBets.Casino.Simulator.wwwroot.play.html")!;
+        return new StreamReader(stream).ReadToEnd();
+    }
+}

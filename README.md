@@ -51,7 +51,7 @@ Postgres `sb_casino`, schema `catalog` (providers, categories, games, per-market
 
 One host plays both demo providers: `sim-seamless` (Swift Studios, slots and crash) and `sim-transfer` (Transfer Games, live tables).
 
-- `GET /play?session=&game=`: the self-contained game page. It only calls `POST /play/start`, `/play/spin` and `/play/cashout`; the host makes the signed wallet calls server-side.
+- `GET /play?session=&game=`: the self-contained game page. It only calls `POST play/start`, `play/spin` and `play/cashout` by RELATIVE url, so it works behind a path prefix (the public gateway serves it at `/casino-sim`, stripping the prefix) and inside a sandboxed iframe; it never navigates the top window or opens popups. The host makes the signed wallet calls server-side.
 - Slots draw three reels with a cryptographic RNG. Middle line pays: three 7s 50x, three BARs 20x, three bells 10x, three cherries 5x, any two cherries 2x. The transfer wheel's 12 segments pay 0, 0, 0, 0, 1, 1, 1, 2, 2, 3, 5 and 10x.
 - Each call the gateway accepts goes into `simulator.transactions` (same database), and `GET /reports/{providerId}/{yyyy-MM-dd}` serves it, signed as above.
 - With `FaultInjection:Enabled=true` (Operator or service token): `POST /faults/{providerId}/drop-from-report?count=1` hides transactions from the next report; `POST /faults/{providerId}/duplicate-next-callback` sends the next win twice.

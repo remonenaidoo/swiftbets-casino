@@ -76,7 +76,7 @@
 
   // Relative on purpose: the page is served at {base}/play behind a path prefix, so 'play/spin' resolves to {base}/play/spin.
   async function post(path, body) {
-    const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-SwiftBets-Csrf': '1' }, body: JSON.stringify(body) });
     return res.json();
   }
   function fail(status) {

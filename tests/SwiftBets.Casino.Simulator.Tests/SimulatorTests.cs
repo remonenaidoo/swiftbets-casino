@@ -50,6 +50,10 @@ public sealed class PlayPageTests
     }
 
     [Fact]
+    public void The_page_sends_the_gateway_csrf_header_because_the_browser_sends_the_session_cookie() =>
+        Page.ShouldContain("'X-SwiftBets-Csrf': '1'");
+
+    [Fact]
     public void The_page_never_calls_a_root_path_or_another_origin()
     {
         Page.ShouldNotContain("'/play");
@@ -57,6 +61,25 @@ public sealed class PlayPageTests
         Page.ShouldNotContain("https://");
         Page.ShouldNotContain("window.top");
         Page.ShouldNotContain("window.open");
+    }
+
+    [Fact]
+    public void The_site_can_frame_the_page_and_its_own_script_runs()
+    {
+        var (html, policy) = GamePage.Render(Page, "n0nce");
+
+        html.ShouldContain("<script nonce=\"n0nce\">");
+        policy.ShouldContain("script-src 'nonce-n0nce'");
+        policy.ShouldContain("frame-ancestors 'self'");
+    }
+
+    [Fact]
+    public void No_other_origin_can_frame_it_and_no_injected_script_runs()
+    {
+        var (_, policy) = GamePage.Render(Page, "n0nce");
+
+        policy.Split(';').Single(d => d.Trim().StartsWith("frame-ancestors", StringComparison.Ordinal)).Trim().ShouldBe("frame-ancestors 'self'");
+        policy.Split(';').Single(d => d.Trim().StartsWith("script-src", StringComparison.Ordinal)).ShouldNotContain("unsafe-inline");
     }
 
     private static string Read()

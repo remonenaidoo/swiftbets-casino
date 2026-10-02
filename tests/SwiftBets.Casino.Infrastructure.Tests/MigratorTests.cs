@@ -2,9 +2,7 @@ using Dapper;
 using Microsoft.Data.SqlClient;
 using SwiftBets.BuildingBlocks.Testing;
 
-[assembly: AssemblyFixture(typeof(SqlServerFixture))]
-
-namespace SwiftBets.Casino.Migrator.Tests;
+namespace SwiftBets.Casino.Infrastructure.Tests;
 
 public sealed class MigratorTests(SqlServerFixture sql)
 {

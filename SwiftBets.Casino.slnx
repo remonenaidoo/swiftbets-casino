@@ -16,7 +16,6 @@
     <Project Path="tests/SwiftBets.Casino.Catalog.Tests/SwiftBets.Casino.Catalog.Tests.csproj" />
     <Project Path="tests/SwiftBets.Casino.Domain.Tests/SwiftBets.Casino.Domain.Tests.csproj" />
     <Project Path="tests/SwiftBets.Casino.Infrastructure.Tests/SwiftBets.Casino.Infrastructure.Tests.csproj" />
-    <Project Path="tests/SwiftBets.Casino.Migrator.Tests/SwiftBets.Casino.Migrator.Tests.csproj" />
     <Project Path="tests/SwiftBets.Casino.Simulator.Tests/SwiftBets.Casino.Simulator.Tests.csproj" />
   </Folder>
 </Solution>

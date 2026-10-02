@@ -92,10 +92,35 @@ public sealed class WalletCallbackTests(SqlServerFixture sql)
         (wallet.Balance, await OutboxCountAsync(connectionString)).ShouldBe((100L, 0));
     }
 
-    private static Task<CallbackReply> Call(WalletCallbackHandler handler, WalletAction action, string token, string ptx, long amount, string? reference = null, bool freeSpin = false) =>
-        handler.HandleAsync(Provider, action, new WalletCallback(token, ptx, "round-1", "sun-temple", amount, "ZAR", freeSpin, reference), CancellationToken.None);
+    [Fact]
+    public async Task A_transfer_in_then_out_moves_money_once_each_and_a_repeated_transfer_out_credits_once()
+    {
+        var (handler, wallet, token, connectionString) = await ArrangeAsync(10_000, provider: Transfer);
 
-    private async Task<(WalletCallbackHandler, FakeWallet, string, string)> ArrangeAsync(long opening, int grantSpins = 0)
+        (await Call(handler, WalletAction.TransferIn, token, "ti-1", 4_000, provider: Transfer)).Status.ShouldBe("ok");
+        await Call(handler, WalletAction.TransferOut, token, "to-1", 5_500, provider: Transfer);
+        await Call(handler, WalletAction.TransferOut, token, "to-1", 5_500, provider: Transfer);
+
+        (wallet.Balance, wallet.Postings).ShouldBe((11_500L, 2));
+        (await OutboxCountAsync(connectionString)).ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task A_round_bet_against_a_transfer_wallet_provider_is_refused_and_moves_nothing()
+    {
+        var (handler, wallet, token, _) = await ArrangeAsync(10_000, provider: Transfer);
+
+        (await Call(handler, WalletAction.Bet, token, "b-x", 500, provider: Transfer)).Status.ShouldBe(CallbackReply.WalletModelMismatch);
+
+        wallet.Balance.ShouldBe(10_000);
+    }
+
+    private const string Transfer = "sim-transfer";
+
+    private static Task<CallbackReply> Call(WalletCallbackHandler handler, WalletAction action, string token, string ptx, long amount, string? reference = null, bool freeSpin = false, string provider = Provider) =>
+        handler.HandleAsync(provider, action, new WalletCallback(token, ptx, "round-1", "sun-temple", amount, "ZAR", freeSpin, reference), CancellationToken.None);
+
+    private async Task<(WalletCallbackHandler, FakeWallet, string, string)> ArrangeAsync(long opening, int grantSpins = 0, string provider = Provider)
     {
         var connectionString = await sql.CreateDatabaseAsync("casino_" + Guid.NewGuid().ToString("N")[..10]);
         var entry = typeof(Program).Assembly.EntryPoint!.Invoke(null, [new[] { $"--ConnectionStrings:SbCasino={connectionString}" }]);
@@ -105,7 +130,7 @@ public sealed class WalletCallbackTests(SqlServerFixture sql)
         var punter = Guid.NewGuid();
         var (token, hash) = SessionToken.New();
         var now = DateTimeOffset.UtcNow;
-        await store.CreateSessionAsync(new GameSession(Guid.NewGuid(), hash, punter, Provider, "sun-temple", "ZAR", now, now.AddHours(2)), CancellationToken.None);
+        await store.CreateSessionAsync(new GameSession(Guid.NewGuid(), hash, punter, provider, "sun-temple", "ZAR", now, now.AddHours(2)), CancellationToken.None);
         if (grantSpins > 0)
         {
             await store.GrantFreeSpinsAsync(punter, "sun-temple", grantSpins, now.AddDays(1), Guid.NewGuid(), CancellationToken.None);

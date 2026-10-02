@@ -28,6 +28,7 @@ app.MapSwiftBetsOperationalEndpoints();
 app.MapLaunchEndpoints();
 app.MapProviderWalletEndpoints();
 app.MapFreeSpinEndpoints();
+app.MapReconciliationEndpoints();
 
 await app.RunAsync();
 return 0;

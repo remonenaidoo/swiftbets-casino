@@ -22,4 +22,7 @@ public sealed class ProviderOptions
     public string Secret { get; set; } = string.Empty;
 
     public string LaunchBaseUrl { get; set; } = string.Empty;
+
+    /// <summary>Where the provider serves its daily report; reconciliation skips a provider without one.</summary>
+    public string ReportUrl { get; set; } = string.Empty;
 }

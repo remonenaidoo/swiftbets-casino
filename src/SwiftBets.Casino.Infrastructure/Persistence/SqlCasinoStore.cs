@@ -22,6 +22,52 @@ public sealed class SqlCasinoStore(ISqlConnectionFactory connections, IOutbox ou
         return await connection.ExecuteScalarAsync<bool>(new CommandDefinition(Sql.Get("Casino.ProviderEnabled"), new { ProviderId = providerId }, cancellationToken: cancellationToken));
     }
 
+    public async Task<string?> GetWalletModelAsync(string providerId, CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.OpenAsync(cancellationToken);
+        return await connection.ExecuteScalarAsync<string?>(new CommandDefinition(Sql.Get("Casino.WalletModel"), new { ProviderId = providerId }, cancellationToken: cancellationToken));
+    }
+
+    public async Task<IReadOnlyList<ReportedTransaction>> ListTransactionsAsync(string providerId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.OpenAsync(cancellationToken);
+        var rows = await connection.QueryAsync<(string ProviderTransactionId, byte Kind, long Amount)>(new CommandDefinition(Sql.Get("Casino.ListTransactions"),
+            new { ProviderId = providerId, From = from, To = to }, cancellationToken: cancellationToken));
+        return [.. rows.Select(r => new ReportedTransaction(r.ProviderTransactionId, (CasinoTransactionKind)r.Kind, r.Amount))];
+    }
+
+    public async Task RecordReconciliationAsync(ReconciliationRun run, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        await using var connection = await connections.OpenAsync(cancellationToken);
+        await using var tx = (SqlTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(Sql.Get("Casino.InsertReconciliation"), new
+        {
+            run.RunId, run.ProviderId, BusinessDate = run.BusinessDate.ToDateTime(TimeOnly.MinValue), run.OurNet, run.ProviderNet, run.Drift,
+            run.MissingOnOurSide, run.MissingOnProviderSide, Status = (byte)run.Status, run.Currency, run.ReconciledAt,
+        }, tx, cancellationToken: cancellationToken));
+        var payload = new ProviderReconciliationV1(run.ProviderId, run.BusinessDate, new Money(run.OurNet, run.Currency), new Money(run.ProviderNet, run.Currency),
+            new Money(run.Drift, run.Currency), run.MissingOnOurSide, run.MissingOnProviderSide, run.Status, run.ReconciledAt);
+        await outbox.EnqueueAsync(tx, Topics.ProviderReconciliation, run.ProviderId,
+            EventEnvelope<ProviderReconciliationV1>.Create(payload, time.GetUtcNow(), CorrelationContext.CorrelationId ?? CorrelationContext.NewId()), cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+    }
+
+    public async Task<bool> HasReconciliationAsync(string providerId, DateOnly businessDate, CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.OpenAsync(cancellationToken);
+        return await connection.ExecuteScalarAsync<bool>(new CommandDefinition(Sql.Get("Casino.HasReconciliation"),
+            new { ProviderId = providerId, BusinessDate = businessDate.ToDateTime(TimeOnly.MinValue) }, cancellationToken: cancellationToken));
+    }
+
+    public async Task<IReadOnlyList<ReconciliationRun>> ListReconciliationsAsync(string? providerId, int limit, CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.OpenAsync(cancellationToken);
+        var rows = await connection.QueryAsync<RunRow>(new CommandDefinition(Sql.Get("Casino.ListReconciliations"),
+            new { ProviderId = providerId, Limit = Math.Clamp(limit, 1, 200) }, cancellationToken: cancellationToken));
+        return [.. rows.Select(r => r.ToRun())];
+    }
+
     public async Task CreateSessionAsync(GameSession session, CancellationToken cancellationToken)
     {
         await using var connection = await connections.OpenAsync(cancellationToken);
@@ -100,6 +146,13 @@ public sealed class SqlCasinoStore(ISqlConnectionFactory connections, IOutbox ou
     {
         await using var connection = await connections.OpenAsync(cancellationToken);
         return [.. await connection.QueryAsync<FreeSpinGrant>(new CommandDefinition(Sql.Get("Casino.ListFreeSpins"), new { PunterId = punterId }, cancellationToken: cancellationToken))];
+    }
+
+    private sealed record RunRow(Guid RunId, string ProviderId, DateTime BusinessDate, long OurNet, long ProviderNet, long Drift, int MissingOnOurSide,
+        int MissingOnProviderSide, byte Status, string Currency, DateTimeOffset ReconciledAt)
+    {
+        public ReconciliationRun ToRun() => new(RunId, ProviderId, DateOnly.FromDateTime(BusinessDate), OurNet, ProviderNet, Drift, MissingOnOurSide,
+            MissingOnProviderSide, (ReconciliationStatus)Status, Currency, ReconciledAt);
     }
 
     private sealed record TransactionRow(Guid TransactionId, string ProviderId, string ProviderTransactionId, string RoundId, Guid PunterId, string GameId,

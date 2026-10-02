@@ -2,6 +2,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using SwiftBets.Casino.Application.Handlers;
 using SwiftBets.Casino.Application.Ports;
+using SwiftBets.Contracts.Casino;
 using SwiftBets.Contracts.Compliance;
 
 namespace SwiftBets.Casino.Application.Tests;
@@ -68,6 +69,38 @@ public sealed class CasinoRulesTests
     private static RestrictionsChangedV1 State(params Restriction[] restrictions) =>
         new(Guid.NewGuid(), 1, [], restrictions, null, null, KycStatus.Verified, Now);
 
+    [Fact]
+    public async Task A_day_whose_report_matches_our_ledger_reconciles_as_matched()
+    {
+        var store = new FakeStore();
+        store.Ledger.AddRange([new("b-1", CasinoTransactionKind.Bet, 500), new("w-1", CasinoTransactionKind.Win, 1_200)]);
+
+        var (run, _) = await Reconciler(store, [.. store.Ledger]).HandleAsync("sim-seamless", new DateOnly(2026, 10, 2), CancellationToken.None);
+
+        (run!.Status, run.OurNet, run.Drift).ShouldBe((ReconciliationStatus.Matched, 700L, 0L));
+        store.Runs.ShouldHaveSingleItem();
+    }
+
+    [Fact]
+    public async Task A_report_missing_a_transaction_reconciles_as_drift_with_its_money()
+    {
+        var store = new FakeStore();
+        store.Ledger.AddRange([new("b-1", CasinoTransactionKind.Bet, 500), new("w-1", CasinoTransactionKind.Win, 1_200)]);
+
+        var (run, _) = await Reconciler(store, [new("b-1", CasinoTransactionKind.Bet, 500)]).HandleAsync("sim-seamless", new DateOnly(2026, 10, 2), CancellationToken.None);
+
+        (run!.Status, run.MissingOnProviderSide, run.MissingOnOurSide, run.Drift).ShouldBe((ReconciliationStatus.Drift, 1, 0, 1_200L));
+    }
+
+    private static ReconcileProviderHandler Reconciler(FakeStore store, List<ReportedTransaction> report) =>
+        new(store, new FixedReport(report), Options.Create(new CasinoOptions()), new FakeTimeProvider(Now));
+
+    private sealed class FixedReport(List<ReportedTransaction> report) : IProviderReports
+    {
+        public Task<IReadOnlyList<ReportedTransaction>?> GetAsync(string providerId, DateOnly businessDate, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<ReportedTransaction>?>(report);
+    }
+
     private sealed class Ready(bool ready) : IRestrictions
     {
         public bool IsReady => ready;
@@ -99,5 +132,26 @@ public sealed class CasinoRulesTests
             Task.FromResult(new FreeSpinGrant(Guid.NewGuid(), punterId, gameId, spins, spins, expiresAt));
 
         public Task<IReadOnlyList<FreeSpinGrant>> ListFreeSpinsAsync(Guid punterId, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<FreeSpinGrant>>([]);
+
+        public List<ReportedTransaction> Ledger { get; } = [];
+
+        public List<ReconciliationRun> Runs { get; } = [];
+
+        public Task<string?> GetWalletModelAsync(string providerId, CancellationToken cancellationToken) =>
+            Task.FromResult<string?>(providerId == "sim-seamless" ? WalletModels.Seamless : null);
+
+        public Task<IReadOnlyList<ReportedTransaction>> ListTransactionsAsync(string providerId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<ReportedTransaction>>(Ledger);
+
+        public Task RecordReconciliationAsync(ReconciliationRun run, CancellationToken cancellationToken)
+        {
+            Runs.Add(run);
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> HasReconciliationAsync(string providerId, DateOnly businessDate, CancellationToken cancellationToken) => Task.FromResult(Runs.Count > 0);
+
+        public Task<IReadOnlyList<ReconciliationRun>> ListReconciliationsAsync(string? providerId, int limit, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<ReconciliationRun>>(Runs);
     }
 }

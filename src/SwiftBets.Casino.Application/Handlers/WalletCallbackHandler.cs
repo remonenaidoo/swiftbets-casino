@@ -11,6 +11,12 @@ public enum WalletAction
     Bet,
     Win,
     Rollback,
+
+    /// <summary>Transfer-wallet providers: move money from the wallet into the provider's session.</summary>
+    TransferIn,
+
+    /// <summary>Transfer-wallet providers: move the session's balance back to the wallet.</summary>
+    TransferOut,
 }
 
 /// <summary>A seamless-wallet callback body, as the provider sends it.</summary>
@@ -38,6 +44,7 @@ public sealed record CallbackReply(string Status, long? Balance, Guid? Transacti
     public const string NoFreeSpins = "no_free_spins";
     public const string BetRolledBack = "bet_rolled_back";
     public const string InvalidReference = "invalid_reference";
+    public const string WalletModelMismatch = "wallet_model_mismatch";
 }
 
 /// <summary>
@@ -58,9 +65,16 @@ public sealed class WalletCallbackHandler(ICasinoStore store, IWalletPort wallet
 
         var session = await store.FindSessionAsync(SessionToken.Hash(callback.SessionToken), cancellationToken);
         var now = time.GetUtcNow();
-        if (session is null || session.ProviderId != providerId || (action == WalletAction.Bet && now >= session.ExpiresAt))
+        if (session is null || session.ProviderId != providerId || (action is WalletAction.Bet or WalletAction.TransferIn && now >= session.ExpiresAt))
         {
             return Reply(CallbackReply.SessionInvalid);
+        }
+
+        // Seamless providers bet and win per round; transfer providers only move a session's money in and out.
+        var transfer = action is WalletAction.TransferIn or WalletAction.TransferOut;
+        if (action != WalletAction.Balance && await store.GetWalletModelAsync(providerId, cancellationToken) is var model && model != (transfer ? WalletModels.Transfer : WalletModels.Seamless))
+        {
+            return Reply(CallbackReply.WalletModelMismatch);
         }
 
         if (action == WalletAction.Balance)
@@ -88,8 +102,40 @@ public sealed class WalletCallbackHandler(ICasinoStore store, IWalletPort wallet
         {
             WalletAction.Bet => await BetAsync(session, callback, ptx, now, cancellationToken),
             WalletAction.Win => await WinAsync(session, callback, ptx, now, cancellationToken),
+            WalletAction.TransferIn => await TransferInAsync(session, callback, ptx, now, cancellationToken),
+            WalletAction.TransferOut => await TransferOutAsync(session, callback, ptx, now, cancellationToken),
             _ => await RollbackAsync(session, callback, ptx, now, cancellationToken),
         };
+    }
+
+    private async Task<CallbackReply> TransferInAsync(GameSession session, WalletCallback callback, string ptx, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (callback.Amount == 0)
+        {
+            return Reply(CallbackReply.InvalidRequest);
+        }
+
+        var debit = await wallet.DebitAsync(Key(session, ptx), session.PunterId, callback.Amount, session.Currency, $"casino transfer in {ptx}", cancellationToken);
+        return debit.Status != WalletStatus.Succeeded
+            ? Reply(Refusal(debit))
+            : await RecordAsync(session, Row(session, callback, ptx, CasinoTransactionKind.TransferIn, callback.Amount, TransactionStatus.Applied, null, now), null, debit.Available, cancellationToken);
+    }
+
+    private async Task<CallbackReply> TransferOutAsync(GameSession session, WalletCallback callback, string ptx, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        long? balance = null;
+        if (callback.Amount > 0)
+        {
+            var credit = await wallet.CreditAsync(Key(session, ptx), session.PunterId, callback.Amount, session.Currency, $"casino transfer out {ptx}", cancellationToken);
+            if (credit.Status != WalletStatus.Succeeded)
+            {
+                return Reply(Refusal(credit));
+            }
+
+            balance = credit.Available;
+        }
+
+        return await RecordAsync(session, Row(session, callback, ptx, CasinoTransactionKind.TransferOut, callback.Amount, TransactionStatus.Applied, null, now), null, balance, cancellationToken);
     }
 
     private async Task<CallbackReply> BetAsync(GameSession session, WalletCallback callback, string ptx, DateTimeOffset now, CancellationToken cancellationToken)

@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SwiftBets game</title>
+<style>
+  :root { --bg:#0e1621; --card:#1d2c3e; --raised:#162231; --line:#2a3d55; --text:#eef3fa; --muted:#8fa3bd; --accent:#2563eb; --odds:#5cc8ff; --win:#26d07c; --gold:#ffc53d; --live:#ff3b5c; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; min-height: 100vh; display: flex; justify-content: center; padding: 16px; }
+  main { width: 100%; max-width: 520px; display: flex; flex-direction: column; gap: 14px; }
+  header { display: flex; justify-content: space-between; align-items: center; }
+  h1 { font-size: 20px; font-weight: 800; }
+  .provider { color: var(--muted); font-size: 12px; }
+  .balance { text-align: right; }
+  .balance small { display: block; color: var(--muted); font-size: 11px; }
+  .balance b { font-size: 18px; font-variant-numeric: tabular-nums; }
+  .stage { background: var(--raised); border: 1px solid var(--line); border-radius: 16px; padding: 22px 16px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .reels { display: flex; gap: 10px; }
+  .reel { width: 84px; height: 96px; border-radius: 12px; background: var(--card); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 900; letter-spacing: .5px; }
+  .reel.spin { animation: blink .18s linear infinite; }
+  @keyframes blink { 50% { opacity: .35; } }
+  .wheel { width: 180px; height: 180px; border-radius: 50%; border: 6px solid var(--accent); display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: 900; background: var(--card); transition: transform .9s cubic-bezier(.2,.8,.2,1); }
+  .result { min-height: 24px; font-weight: 800; }
+  .result.win { color: var(--win); }
+  .result.lose { color: var(--muted); }
+  .controls { display: flex; flex-direction: column; gap: 10px; }
+  .chips { display: flex; gap: 6px; }
+  .chip { flex: 1; padding: 10px 0; border-radius: 10px; border: 2px solid transparent; background: var(--card); color: var(--text); font-weight: 800; cursor: pointer; }
+  .chip.on { border-color: var(--accent); }
+  button.go { padding: 15px; border: 0; border-radius: 12px; background: var(--win); color: #04230f; font-size: 16px; font-weight: 900; cursor: pointer; }
+  button.ghost { padding: 12px; border: 1px solid var(--accent); border-radius: 12px; background: transparent; color: var(--text); font-weight: 800; cursor: pointer; }
+  button:disabled { opacity: .45; cursor: default; }
+  .panel { background: var(--card); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  input { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; font-size: 16px; }
+  .note { color: var(--muted); font-size: 12px; text-align: center; }
+  .error { color: var(--live); font-weight: 700; text-align: center; min-height: 18px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><h1 id="title">Loading…</h1><div class="provider" id="provider"></div></div>
+    <div class="balance"><small id="balanceLabel">Wallet</small><b id="balance">–</b></div>
+  </header>
+
+  <section class="panel" id="transferPanel" hidden>
+    <b>Move money into this table</b>
+    <span class="note" style="text-align:left">This game plays from a table balance. What is left goes back to your wallet when you cash out.</span>
+    <input id="transferAmount" inputmode="decimal" value="50" aria-label="Amount in rand to move to the table">
+    <button class="go" id="transferBtn">Move to table</button>
+  </section>
+
+  <section class="stage" id="stage" hidden>
+    <div class="reels" id="reels" hidden><div class="reel">7</div><div class="reel">BAR</div><div class="reel">BELL</div></div>
+    <div class="wheel" id="wheel" hidden>×?</div>
+    <div class="result" id="result" aria-live="polite"></div>
+  </section>
+
+  <section class="controls" id="controls" hidden>
+    <div class="chips" id="chips"></div>
+    <button class="go" id="spinBtn">Spin</button>
+    <button class="ghost" id="cashoutBtn" hidden>Cash out to wallet</button>
+  </section>
+
+  <div class="error" id="error" role="alert"></div>
+  <p class="note">Simulated game for the SwiftBets demo. 18+. Play responsibly.</p>
+</main>
+<script>
+  const q = new URLSearchParams(location.search);
+  const session = q.get('session'), game = q.get('game');
+  const $ = (id) => document.getElementById(id);
+  const rand = (minor) => 'R ' + (minor / 100).toFixed(2);
+  let model = null, minBet = 100, stake = 100, rotation = 0;
+
+  async function post(path, body) {
+    const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    return res.json();
+  }
+  function fail(status) {
+    const messages = { insufficient_funds: 'Not enough in your wallet.', session_invalid: 'This game session has ended. Open the game again from the lobby.', insufficient_session_balance: 'Not enough on the table. Cash out and move more in.', account_restricted: 'Your account cannot play right now.', limit_exceeded: 'That would go over one of your limits.' };
+    $('error').textContent = messages[status] || ('Something went wrong (' + status + ').');
+  }
+  function chips() {
+    const options = [1, 2, 5, 10].map((m) => m * minBet);
+    stake = options[0];
+    $('chips').innerHTML = '';
+    options.forEach((value) => {
+      const b = document.createElement('button');
+      b.className = 'chip' + (value === stake ? ' on' : '');
+      b.textContent = rand(value);
+      b.onclick = () => { stake = value; [...$('chips').children].forEach((c) => c.classList.toggle('on', c === b)); };
+      $('chips').appendChild(b);
+    });
+  }
+  function ready() {
+    $('stage').hidden = false; $('controls').hidden = false; $('transferPanel').hidden = true;
+    $('reels').hidden = model !== 'seamless'; $('wheel').hidden = model === 'seamless';
+    $('spinBtn').textContent = model === 'seamless' ? 'Spin' : 'Spin the wheel';
+    $('cashoutBtn').hidden = model === 'seamless';
+    chips();
+  }
+  async function start(transferIn) {
+    $('error').textContent = '';
+    const r = await post('/play/start', { session, game, transferIn });
+    if (r.game) $('title').textContent = r.game;
+    model = r.model || model; minBet = r.minBet || minBet;
+    $('provider').textContent = model === 'seamless' ? 'Swift Studios · bets straight from your wallet' : 'Transfer Games · plays from a table balance';
+    if (r.status === 'transfer_needed') { $('transferPanel').hidden = false; $('balanceLabel').textContent = 'Table'; return; }
+    if (r.status !== 'ok') return fail(r.status);
+    if (model === 'seamless') { $('balance').textContent = rand(r.balance); } else { $('balanceLabel').textContent = 'Table'; $('balance').textContent = rand(r.sessionBalance); }
+    ready();
+  }
+  $('transferBtn').onclick = () => start(Math.round(parseFloat($('transferAmount').value.replace(',', '.')) * 100) || 0);
+  $('spinBtn').onclick = async () => {
+    $('error').textContent = ''; $('spinBtn').disabled = true; $('result').textContent = '';
+    [...$('reels').children].forEach((r) => r.classList.add('spin'));
+    const r = await post('/play/spin', { session, game, bet: stake });
+    [...$('reels').children].forEach((r) => r.classList.remove('spin'));
+    $('spinBtn').disabled = false;
+    if (r.status !== 'ok') return fail(r.status);
+    if (model === 'seamless') {
+      r.reels.forEach((s, i) => { $('reels').children[i].textContent = s; });
+      $('balance').textContent = rand(r.balance);
+    } else {
+      rotation += 720 + r.segment * 30; $('wheel').style.transform = 'rotate(' + rotation + 'deg)'; $('wheel').textContent = '×' + r.multiplier;
+      $('balance').textContent = rand(r.sessionBalance);
+    }
+    $('result').className = 'result ' + (r.win > 0 ? 'win' : 'lose');
+    $('result').textContent = r.win > 0 ? 'You win ' + rand(r.win) + '!' : 'No win this time';
+  };
+  $('cashoutBtn').onclick = async () => {
+    const r = await post('/play/cashout', { session, game });
+    if (r.status !== 'ok') return fail(r.status);
+    $('result').className = 'result win'; $('result').textContent = rand(r.cashedOut) + ' back in your wallet';
+    $('balanceLabel').textContent = 'Wallet'; $('balance').textContent = rand(r.balance);
+    $('controls').hidden = true;
+  };
+  start(0);
+</script>
+</body>
+</html>

@@ -14,7 +14,7 @@ jobs:
   dotnet:
     uses: remonenaidoo/swiftbets-platform/.github/workflows/dotnet.yml@main
     with:
-      images: '[{"name": "swiftbets-casino", "dockerfile": "deploy/SwiftBets.Casino.Gateway.Api.Dockerfile"}, {"name": "swiftbets-casino-migrator", "dockerfile": "deploy/SwiftBets.Casino.Migrator.Dockerfile"}]'
+      images: '[{"name": "swiftbets-casino", "dockerfile": "deploy/SwiftBets.Casino.Gateway.Api.Dockerfile"}, {"name": "swiftbets-casino-migrator", "dockerfile": "deploy/SwiftBets.Casino.Migrator.Dockerfile"}, {"name": "swiftbets-casino-catalog", "dockerfile": "deploy/SwiftBets.Casino.Catalog.Api.Dockerfile"}, {"name": "swiftbets-casino-catalog-migrator", "dockerfile": "deploy/SwiftBets.Casino.CatalogMigrator.Dockerfile"}, {"name": "swiftbets-casino-sim", "dockerfile": "deploy/SwiftBets.Casino.Simulator.Dockerfile"}]'
       coverage: true
       coverage-floors: '{"SwiftBets.Casino.Domain": {"branch": 80}, "SwiftBets.Casino.Application": {"branch": 60}}'
     permissions:

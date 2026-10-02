@@ -1,17 +1,22 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/SwiftBets.Casino.Application/SwiftBets.Casino.Application.csproj" />
+    <Project Path="src/SwiftBets.Casino.Catalog.Api/SwiftBets.Casino.Catalog.Api.csproj" />
+    <Project Path="src/SwiftBets.Casino.CatalogMigrator/SwiftBets.Casino.CatalogMigrator.csproj" />
     <Project Path="src/SwiftBets.Casino.Domain/SwiftBets.Casino.Domain.csproj" />
     <Project Path="src/SwiftBets.Casino.Gateway.Api/SwiftBets.Casino.Gateway.Api.csproj" />
     <Project Path="src/SwiftBets.Casino.Infrastructure/SwiftBets.Casino.Infrastructure.csproj" />
     <Project Path="src/SwiftBets.Casino.Migrator/SwiftBets.Casino.Migrator.csproj" />
+    <Project Path="src/SwiftBets.Casino.Simulator/SwiftBets.Casino.Simulator.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/SwiftBets.Casino.Api.Tests/SwiftBets.Casino.Api.Tests.csproj" />
     <Project Path="tests/SwiftBets.Casino.Application.Tests/SwiftBets.Casino.Application.Tests.csproj" />
     <Project Path="tests/SwiftBets.Casino.ArchitectureTests/SwiftBets.Casino.ArchitectureTests.csproj" />
+    <Project Path="tests/SwiftBets.Casino.Catalog.Tests/SwiftBets.Casino.Catalog.Tests.csproj" />
     <Project Path="tests/SwiftBets.Casino.Domain.Tests/SwiftBets.Casino.Domain.Tests.csproj" />
     <Project Path="tests/SwiftBets.Casino.Infrastructure.Tests/SwiftBets.Casino.Infrastructure.Tests.csproj" />
     <Project Path="tests/SwiftBets.Casino.Migrator.Tests/SwiftBets.Casino.Migrator.Tests.csproj" />
+    <Project Path="tests/SwiftBets.Casino.Simulator.Tests/SwiftBets.Casino.Simulator.Tests.csproj" />
   </Folder>
 </Solution>

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <ItemGroup>
+    <PackageReference Include="SwiftBets.BuildingBlocks.Observability" />
+    <PackageReference Include="SwiftBets.BuildingBlocks.Persistence" />
+    <PackageReference Include="SwiftBets.BuildingBlocks.Web" />
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+    <ProjectReference Include="../SwiftBets.Casino.Domain/SwiftBets.Casino.Domain.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Sql/*.sql" />
+    <EmbeddedResource Include="wwwroot/play.html" />
+  </ItemGroup>
+</Project>

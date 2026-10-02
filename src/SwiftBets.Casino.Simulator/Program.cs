@@ -35,8 +35,8 @@ app.UseAuthorization();
 app.MapSwiftBetsOperationalEndpoints();
 
 var page = ReadPage();
-app.MapGet("/play", (string? session, string? game) =>
-    string.IsNullOrEmpty(session) || string.IsNullOrEmpty(game) ? Results.BadRequest("session and game are required") : Results.Content(page, "text/html; charset=utf-8"))
+app.MapGet("/play", (string? session, string? game, HttpContext context) =>
+    string.IsNullOrEmpty(session) || string.IsNullOrEmpty(game) ? Results.BadRequest("session and game are required") : GamePage.Serve(page, context))
     .AllowAnonymous();
 app.MapPost("/play/start", (StartRequest request, Play play, CancellationToken cancellationToken) => play.StartAsync(request, cancellationToken)).AllowAnonymous();
 app.MapPost("/play/spin", (SpinRequest request, Play play, CancellationToken cancellationToken) => play.SpinAsync(request, cancellationToken)).AllowAnonymous();

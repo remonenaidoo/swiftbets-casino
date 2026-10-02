@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="SwiftBets.BuildingBlocks.Core" />
+    <PackageReference Include="SwiftBets.BuildingBlocks.Messaging" />
+    <PackageReference Include="SwiftBets.BuildingBlocks.Outbox" />
+    <PackageReference Include="SwiftBets.BuildingBlocks.Persistence" />
+    <PackageReference Include="SwiftBets.BuildingBlocks.Resilience" />
+    <PackageReference Include="SwiftBets.BuildingBlocks.Web" />
+    <PackageReference Include="SwiftBets.Contracts.Grpc" />
+    <PackageReference Include="Grpc.Net.ClientFactory" />
+    <ProjectReference Include="../SwiftBets.Casino.Application/SwiftBets.Casino.Application.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Sql/*.sql" />
+  </ItemGroup>
+</Project>

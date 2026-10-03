@@ -74,10 +74,9 @@ public sealed class PragmaticWalletHandler(ICasinoStore store, WalletCallbackHan
         {
             case "balance":
             case "endRound":
-                var balance = await wallet.GetBalanceAsync(punterId, cancellationToken);
-                return balance.Status == WalletStatus.Succeeded
-                    ? Render(new() { ["currency"] = session.Currency, ["cash"] = Major(balance.Available ?? 0), ["bonus"] = 0m }, PragmaticError.Success)
-                    : Error(PragmaticError.InternalRetry, "Wallet unavailable");
+                return Cash(await wallet.GetBalanceAsync(punterId, cancellationToken), out var cash) is { } refused
+                    ? refused
+                    : Render(new() { ["currency"] = session.Currency, ["cash"] = cash, ["bonus"] = 0m }, PragmaticError.Success);
             case "refund":
                 return await MoveAsync(session, WalletAction.Rollback, form, "refund:" + Get(form, "reference"), 0, Get(form, "reference"), includeCash: false, cancellationToken);
             case "adjustment" when TryAmount(form, out var adjustment) && adjustment < 0:
@@ -117,12 +116,11 @@ public sealed class PragmaticWalletHandler(ICasinoStore store, WalletCallbackHan
             return Error(PragmaticError.TokenExpired, "Token expired");
         }
 
-        var balance = await wallet.GetBalanceAsync(session.PunterId, cancellationToken);
-        return balance.Status != WalletStatus.Succeeded
-            ? Error(PragmaticError.InternalRetry, "Wallet unavailable")
+        return Cash(await wallet.GetBalanceAsync(session.PunterId, cancellationToken), out var cash) is { } refused
+            ? refused
             : Render(new()
             {
-                ["userId"] = session.PunterId.ToString(), ["currency"] = session.Currency, ["cash"] = Major(balance.Available ?? 0), ["bonus"] = 0m,
+                ["userId"] = session.PunterId.ToString(), ["currency"] = session.Currency, ["cash"] = cash, ["bonus"] = 0m,
                 ["token"] = token, ["country"] = "ZA", ["jurisdiction"] = "ZA",
             }, PragmaticError.Success);
     }
@@ -200,6 +198,19 @@ public sealed class PragmaticWalletHandler(ICasinoStore store, WalletCallbackHan
     }
 
     private static decimal Major(long minor) => minor / 100m;
+
+    /// <summary>A player with no wallet account yet has nothing in it; anything else the wallet refuses is not a balance.</summary>
+    private static string? Cash(WalletResult balance, out decimal cash)
+    {
+        cash = Major(balance.Available ?? 0);
+        return balance switch
+        {
+            { Status: WalletStatus.Succeeded } or { Status: WalletStatus.Refused, FailureCode: "AccountNotFound" } => null,
+            { Status: WalletStatus.Refused, FailureCode: "AccountRestricted" or "AccountBlacklisted" } => Error(PragmaticError.PlayerFrozen, "Player cannot play right now"),
+            { Status: WalletStatus.Refused } => Error(PragmaticError.InternalNoRetry, "Wallet refused"),
+            _ => Error(PragmaticError.InternalRetry, "Wallet unavailable"),
+        };
+    }
 
     private static string? Get(IReadOnlyDictionary<string, string> form, string key) => form.TryGetValue(key, out var value) ? value : null;
 }

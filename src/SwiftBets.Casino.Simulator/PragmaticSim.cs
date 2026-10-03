@@ -115,7 +115,7 @@ public sealed class PragmaticSim(PragmaticClient client, Ledger ledger, Faults f
     /// <summary>Demo rounds: R1000 of play money per demo session, held here; no callback is ever sent.</summary>
     public IResult DemoStart(StartRequest request) => PragmaticGames.Find(request.Game) is not { } game
         ? Results.NotFound(new { status = "game_not_found" })
-        : Results.Ok(new { model = "seamless", provider = "Free demo · play money, nothing at stake", game = game.GameName, minBet = MinBet, status = "ok", balance = _demo.GetOrAdd(request.Session, 100_000) });
+        : Results.Ok(new { model = "seamless", provider = "Free demo · play money, nothing at stake", balanceLabel = "Play money", game = game.GameName, minBet = MinBet, status = "ok", balance = _demo.GetOrAdd(request.Session, 100_000) });
 
     public IResult DemoSpin(SpinRequest request)
     {

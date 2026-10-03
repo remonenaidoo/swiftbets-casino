@@ -106,6 +106,7 @@
     $('error').textContent = '';
     const r = await post('play/start', { session, game, transferIn });
     if (r.game) $('title').textContent = r.game;
+    if (r.balanceLabel) $('balanceLabel').textContent = r.balanceLabel;
     model = r.model || model; minBet = r.minBet || minBet;
     $('provider').textContent = r.provider || (model === 'seamless' ? 'Swift Studios · bets straight from your wallet' : 'Transfer Games · plays from a table balance');
     if (r.status === 'transfer_needed') { $('transferPanel').hidden = false; $('balanceLabel').textContent = 'Table'; return; }

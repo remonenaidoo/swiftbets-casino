@@ -44,3 +44,10 @@ internal sealed class FakeWallet(long opening) : IWalletPort
 
     private Task<WalletResult> Ok() => Task.FromResult(new WalletResult(WalletStatus.Succeeded, null, Balance));
 }
+
+/// <summary>Compliance that clears everyone, or restricts the listed players.</summary>
+internal sealed class AllowAll(params Guid[] restricted) : IRestrictions
+{
+    public Task<RestrictionCheck> CheckAsync(Guid punterId, DateTimeOffset now, CancellationToken cancellationToken) =>
+        Task.FromResult(restricted.Contains(punterId) ? RestrictionCheck.Restricted : RestrictionCheck.Clear);
+}

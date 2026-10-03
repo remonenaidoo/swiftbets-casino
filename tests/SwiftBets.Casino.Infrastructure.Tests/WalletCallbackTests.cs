@@ -137,7 +137,7 @@ public sealed class WalletCallbackTests(SqlServerFixture sql)
         }
 
         var wallet = new FakeWallet(opening);
-        return (new WalletCallbackHandler(store, wallet, Options.Create(new CasinoOptions()), TimeProvider.System), wallet, token, connectionString);
+        return (new WalletCallbackHandler(store, wallet, new AllowAll(), Options.Create(new CasinoOptions()), TimeProvider.System), wallet, token, connectionString);
     }
 
     private static async Task<int> OutboxCountAsync(string connectionString)

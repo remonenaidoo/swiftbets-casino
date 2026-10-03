@@ -21,14 +21,21 @@ public interface ICasinoStore
 
     Task<GameSession?> FindSessionAsync(byte[] tokenHash, CancellationToken cancellationToken);
 
+    /// <summary>The player's newest session with a provider: Pragmatic names the player, not the token, after authenticate.</summary>
+    Task<GameSession?> FindLatestSessionAsync(Guid punterId, string providerId, CancellationToken cancellationToken);
+
+    /// <summary>Games the player opened most recently, newest first, one row per game.</summary>
+    Task<IReadOnlyList<RecentGame>> ListRecentGamesAsync(Guid punterId, int limit, CancellationToken cancellationToken);
+
     Task<StoredTransaction?> FindTransactionAsync(string providerId, string providerTransactionId, CancellationToken cancellationToken);
 
     /// <summary>True when a rollback naming this bet was already recorded, whether the bet was seen or not.</summary>
     Task<bool> IsRolledBackAsync(string providerId, string betProviderTransactionId, CancellationToken cancellationToken);
 
     /// <summary>
-    /// In one SQL transaction: takes a free spin when asked, inserts the row, marks a rolled-back bet, and enqueues its
-    /// CasinoTransactionV1. A duplicate provider transaction id or a missing free spin changes nothing.
+    /// In one SQL transaction: takes a free spin when asked, inserts the row with its reply, marks a rolled-back bet, and
+    /// enqueues its CasinoTransactionV1. A duplicate provider transaction id, a missing free spin, a bet already refunded or
+    /// a refund marker whose bet arrived meanwhile changes nothing.
     /// </summary>
     Task<RecordOutcome> RecordAsync(StoredTransaction transaction, bool takeFreeSpin, string? markRolledBack, CancellationToken cancellationToken);
 

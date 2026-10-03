@@ -11,6 +11,8 @@ public static class ApplicationRegistration
         services.AddScoped<WalletCallbackHandler>();
         services.AddScoped<FreeSpinsHandler>();
         services.AddScoped<ReconcileProviderHandler>();
+        services.AddScoped<PragmaticWalletHandler>();
+        services.AddScoped<SyncCatalogueHandler>();
         return services;
     }
 }

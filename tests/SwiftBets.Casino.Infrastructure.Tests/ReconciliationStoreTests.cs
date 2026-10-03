@@ -20,7 +20,7 @@ public sealed class ReconciliationStoreTests(SqlServerFixture sql)
     public async Task A_day_that_matches_the_provider_report_is_stored_and_published_once()
     {
         var (store, wallet, token, connectionString) = await ArrangeAsync();
-        var handler = new WalletCallbackHandler(store, wallet, Options.Create(new CasinoOptions()), TimeProvider.System);
+        var handler = new WalletCallbackHandler(store, wallet, new AllowAll(), Options.Create(new CasinoOptions()), TimeProvider.System);
         await handler.HandleAsync("sim-seamless", WalletAction.Bet, new WalletCallback(token, "b-1", "r-1", "sun-temple", 500, "ZAR"), CancellationToken.None);
         await handler.HandleAsync("sim-seamless", WalletAction.Win, new WalletCallback(token, "w-1", "r-1", "sun-temple", 900, "ZAR"), CancellationToken.None);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);

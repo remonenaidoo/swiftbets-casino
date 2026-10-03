@@ -11,6 +11,7 @@ using SwiftBets.Casino.Application;
 using SwiftBets.Casino.Application.Ports;
 using SwiftBets.Casino.Infrastructure.Compliance;
 using SwiftBets.Casino.Infrastructure.Persistence;
+using SwiftBets.Casino.Infrastructure.Providers;
 using SwiftBets.Casino.Infrastructure.Reconciliation;
 using SwiftBets.Casino.Infrastructure.Wallet;
 using SwiftBets.Contracts.Compliance;
@@ -38,6 +39,21 @@ public static class InfrastructureRegistration
         });
         services.AddSingleton<IRestrictions, ComplianceRestrictions>();
         services.AddHttpClient(HttpProviderReports.ClientName, http => http.Timeout = TimeSpan.FromSeconds(30));
+        services.AddSingleton<CredentialCipher>();
+        services.AddSingleton<IProviderDirectory, SqlProviderDirectory>();
+        services.AddHttpClient(PragmaticGameApi.ClientName, http => http.Timeout = TimeSpan.FromSeconds(10));
+        services.AddSingleton<IProviderGameApi, PragmaticGameApi>();
+        services.AddHttpClient(HttpCatalogSink.ClientName, (sp, http) =>
+        {
+            var address = sp.GetRequiredService<IOptions<CasinoOptions>>().Value.CatalogAddress;
+            http.BaseAddress = new Uri((address.Length > 0 ? address : "http://casino-catalog:8080").TrimEnd('/') + "/");
+            http.Timeout = TimeSpan.FromSeconds(30);
+        });
+        services.AddSingleton<ICatalogSink, HttpCatalogSink>();
+        if (configuration.GetValue("Casino:CatalogueSync:Enabled", true))
+        {
+            services.AddHostedService<CatalogueSyncWorker>();
+        }
         services.AddSingleton<IProviderReports, HttpProviderReports>();
         if (configuration.GetValue("Casino:Reconciliation:Enabled", true))
         {

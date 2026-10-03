@@ -80,6 +80,18 @@ public sealed class SqlCasinoStore(ISqlConnectionFactory connections, IOutbox ou
         return await connection.QuerySingleOrDefaultAsync<GameSession>(new CommandDefinition(Sql.Get("Casino.FindSession"), new { TokenHash = tokenHash }, cancellationToken: cancellationToken));
     }
 
+    public async Task<GameSession?> FindLatestSessionAsync(Guid punterId, string providerId, CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.OpenAsync(cancellationToken);
+        return await connection.QuerySingleOrDefaultAsync<GameSession>(new CommandDefinition(Sql.Get("Casino.FindLatestSession"), new { PunterId = punterId, ProviderId = providerId }, cancellationToken: cancellationToken));
+    }
+
+    public async Task<IReadOnlyList<RecentGame>> ListRecentGamesAsync(Guid punterId, int limit, CancellationToken cancellationToken)
+    {
+        await using var connection = await connections.OpenAsync(cancellationToken);
+        return [.. await connection.QueryAsync<RecentGame>(new CommandDefinition(Sql.Get("Casino.ListRecentGames"), new { PunterId = punterId, Limit = Math.Clamp(limit, 1, 50) }, cancellationToken: cancellationToken))];
+    }
+
     public async Task<StoredTransaction?> FindTransactionAsync(string providerId, string providerTransactionId, CancellationToken cancellationToken)
     {
         await using var connection = await connections.OpenAsync(cancellationToken);
@@ -106,18 +118,26 @@ public sealed class SqlCasinoStore(ISqlConnectionFactory connections, IOutbox ou
             return RecordOutcome.NoFreeSpins;
         }
 
+        int inserted;
         try
         {
-            await connection.ExecuteAsync(new CommandDefinition(Sql.Get("Casino.InsertTransaction"), new
+            inserted = await connection.ExecuteScalarAsync<int>(new CommandDefinition(Sql.Get("Casino.InsertTransaction"), new
             {
                 transaction.TransactionId, transaction.ProviderId, transaction.ProviderTransactionId, transaction.RoundId, transaction.PunterId, transaction.GameId,
                 Kind = (byte)transaction.Kind, transaction.Amount, transaction.Currency, Status = (byte)transaction.Status, transaction.ReferencesProviderTransactionId, transaction.CreatedAt,
+                transaction.Reply,
             }, tx, cancellationToken: cancellationToken));
         }
         catch (SqlException ex) when (ex.Number == UniqueViolation)
         {
             await tx.RollbackAsync(cancellationToken);
             return RecordOutcome.Duplicate;
+        }
+
+        if (inserted != 0)
+        {
+            await tx.RollbackAsync(cancellationToken);
+            return inserted == 1 ? RecordOutcome.RolledBack : RecordOutcome.BetAlreadyRecorded;
         }
 
         if (markRolledBack is not null)
@@ -156,9 +176,9 @@ public sealed class SqlCasinoStore(ISqlConnectionFactory connections, IOutbox ou
     }
 
     private sealed record TransactionRow(Guid TransactionId, string ProviderId, string ProviderTransactionId, string RoundId, Guid PunterId, string GameId,
-        byte Kind, long Amount, string Currency, byte Status, string? ReferencesProviderTransactionId, DateTimeOffset CreatedAt)
+        byte Kind, long Amount, string Currency, byte Status, string? ReferencesProviderTransactionId, DateTimeOffset CreatedAt, string? Reply)
     {
         public StoredTransaction ToStored() => new(TransactionId, ProviderId, ProviderTransactionId, RoundId, PunterId, GameId, (CasinoTransactionKind)Kind, Amount, Currency,
-            (TransactionStatus)Status, ReferencesProviderTransactionId, CreatedAt);
+            (TransactionStatus)Status, ReferencesProviderTransactionId, CreatedAt, Reply);
     }
 }

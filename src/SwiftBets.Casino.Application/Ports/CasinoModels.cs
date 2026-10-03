@@ -7,7 +7,8 @@ public sealed record GameSession(Guid SessionId, byte[] TokenHash, Guid PunterId
 
 public sealed record StoredTransaction(
     Guid TransactionId, string ProviderId, string ProviderTransactionId, string RoundId, Guid PunterId, string GameId,
-    CasinoTransactionKind Kind, long Amount, string Currency, TransactionStatus Status, string? ReferencesProviderTransactionId, DateTimeOffset CreatedAt);
+    CasinoTransactionKind Kind, long Amount, string Currency, TransactionStatus Status, string? ReferencesProviderTransactionId, DateTimeOffset CreatedAt,
+    string? Reply = null);
 
 public sealed record FreeSpinGrant(Guid GrantId, Guid PunterId, string GameId, int Granted, int Remaining, DateTimeOffset ExpiresAt);
 
@@ -20,6 +21,12 @@ public enum RecordOutcome
 
     /// <summary>A free-spin bet with no grant left for the game; nothing changed.</summary>
     NoFreeSpins,
+
+    /// <summary>A bet whose refund was already recorded, found under the same lock as the insert; nothing changed.</summary>
+    RolledBack,
+
+    /// <summary>An unseen-refund marker whose bet was recorded meanwhile; nothing changed, refund the bet instead.</summary>
+    BetAlreadyRecorded,
 }
 
 public enum WalletStatus
@@ -43,3 +50,5 @@ public sealed record ReportedTransaction(string ProviderTransactionId, CasinoTra
 public sealed record ReconciliationRun(
     Guid RunId, string ProviderId, DateOnly BusinessDate, long OurNet, long ProviderNet, long Drift, int MissingOnOurSide, int MissingOnProviderSide,
     ReconciliationStatus Status, string Currency, DateTimeOffset ReconciledAt);
+
+public sealed record RecentGame(string ProviderId, string GameId, DateTimeOffset PlayedAt);

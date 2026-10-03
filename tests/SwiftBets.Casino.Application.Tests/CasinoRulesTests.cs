@@ -59,11 +59,81 @@ public sealed class CasinoRulesTests
         (await handler.GrantAsync(new(Guid.NewGuid(), "sun-temple", 5, Now.AddDays(-1)), Guid.NewGuid(), CancellationToken.None)).Error.ShouldBe("expiry_in_past");
     }
 
+    [Fact]
+    public async Task A_pragmatic_launch_asks_the_provider_api_for_the_game_url_with_our_session_token()
+    {
+        var store = new FakeStore();
+
+        var result = await Launcher(store, ready: true).HandleAsync(Guid.NewGuid(), "pragmatic", "vs20sunwolf", CancellationToken.None);
+
+        result.Status.ShouldBe(LaunchStatus.Launched);
+        result.LaunchUrl.ShouldBe($"http://pp.test/game?token={result.SessionToken}&symbol=vs20sunwolf");
+        store.Sessions.ShouldHaveSingleItem().ProviderId.ShouldBe("pragmatic");
+    }
+
+    [Fact]
+    public async Task Demo_play_opens_without_a_session_and_is_refused_for_a_provider_without_a_demo_address()
+    {
+        var store = new FakeStore();
+
+        (await Launcher(store, ready: true).DemoAsync("pragmatic", "vs20sunwolf", null, CancellationToken.None)).LaunchUrl.ShouldBe("http://demo.test/demo?symbol=vs20sunwolf");
+        (await Launcher(store, ready: true).DemoAsync("sim-seamless", "sun-temple", null, CancellationToken.None)).Status.ShouldBe(LaunchStatus.NoDemo);
+        store.Sessions.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_catalogue_sync_sends_the_providers_list_and_reports_what_was_new()
+    {
+        var options = Pragmatic();
+
+        var result = await new SyncCatalogueHandler(new Directory(options), new GameApi(), new Sink(2)).HandleAsync("pragmatic", CancellationToken.None);
+
+        (result.Listed, result.Added, result.Error).ShouldBe((1, 2, null));
+    }
+
+    [Fact]
+    public async Task A_catalogue_sync_names_what_failed_for_an_unknown_provider_or_an_unreachable_catalogue()
+    {
+        var options = Pragmatic();
+
+        (await new SyncCatalogueHandler(new Directory(options), new GameApi(), new Sink(2)).HandleAsync("sim-seamless", CancellationToken.None)).Error.ShouldBe(SyncResult.ProviderUnknown);
+        (await new SyncCatalogueHandler(new Directory(options), new GameApi(), new Sink(null)).HandleAsync("pragmatic", CancellationToken.None)).Error.ShouldBe(SyncResult.CatalogueUnreachable);
+    }
+
+    [Fact]
+    public void Our_refusals_map_onto_pragmatic_codes_with_retry_only_when_it_can_help()
+    {
+        Code(PragmaticWalletHandler.Refused(CallbackReply.InsufficientFunds)).ShouldBe(PragmaticError.InsufficientBalance);
+        Code(PragmaticWalletHandler.Refused(CallbackReply.LimitExceeded)).ShouldBe(PragmaticError.RegulatoryLimit);
+        Code(PragmaticWalletHandler.Refused(CallbackReply.WalletUnavailable)).ShouldBe(PragmaticError.InternalRetry);
+        Code(PragmaticWalletHandler.Refused(CallbackReply.SessionInvalid)).ShouldBe(PragmaticError.TokenExpired);
+    }
+
+    [Fact]
+    public void An_unrecognised_refusal_never_asks_the_provider_to_retry() =>
+        Code(PragmaticWalletHandler.Refused("something_new")).ShouldBe(PragmaticError.InternalNoRetry);
+
+    private static int Code(string reply) => System.Text.Json.JsonDocument.Parse(reply).RootElement.GetProperty("error").GetInt32();
+
+    private static CasinoOptions Pragmatic()
+    {
+        var options = new CasinoOptions();
+        options.Providers["sim-seamless"] = new ProviderOptions { Secret = "s", LaunchBaseUrl = "http://provider.test/" };
+        options.Providers["pragmatic"] = new ProviderOptions { Secret = "s", Protocol = ProviderProtocols.Pragmatic, ApiBaseUrl = "http://pp.test" };
+        return options;
+    }
+
+    private sealed class Sink(int? added) : ICatalogSink
+    {
+        public Task<int?> SyncAsync(string providerId, IReadOnlyList<ProviderGame> games, CancellationToken cancellationToken) => Task.FromResult(added);
+    }
+
     private static LaunchGameHandler Launcher(FakeStore store, bool ready)
     {
         var options = new CasinoOptions();
         options.Providers["sim-seamless"] = new ProviderOptions { Secret = "s", LaunchBaseUrl = "http://provider.test/" };
-        return new LaunchGameHandler(store, new Ready(ready), Options.Create(options), new FakeTimeProvider(Now));
+        options.Providers["pragmatic"] = new ProviderOptions { Secret = "s", Protocol = ProviderProtocols.Pragmatic, ApiBaseUrl = "http://pp.test", DemoBaseUrl = "http://demo.test" };
+        return new LaunchGameHandler(store, new Directory(options), new GameApi(), new Ready(ready), Options.Create(options), new FakeTimeProvider(Now));
     }
 
     private static RestrictionsChangedV1 State(params Restriction[] restrictions) =>
@@ -101,6 +171,32 @@ public sealed class CasinoRulesTests
             Task.FromResult<IReadOnlyList<ReportedTransaction>?>(report);
     }
 
+    private sealed class Directory(CasinoOptions options) : IProviderDirectory
+    {
+        public Task<ProviderSettings?> GetAsync(string providerId, CancellationToken cancellationToken) =>
+            Task.FromResult(options.Providers.TryGetValue(providerId, out var p)
+                ? new ProviderSettings(providerId, true, WalletModels.Seamless, p.Protocol, p.Secret, p.SecureLogin, p.LaunchBaseUrl, p.ApiBaseUrl, p.DemoBaseUrl, p.ImageBaseUrl, p.AllowedAddresses, null)
+                : null);
+
+        public Task<IReadOnlyList<ProviderSettings>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<bool> UpdateAsync(string providerId, ProviderUpdate update, Guid operatorId, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<bool> SetCredentialsAsync(string providerId, string? secureLogin, string? secret, Guid operatorId, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    /// <summary>A provider launch API that answers with a URL carrying the token, and a demo URL builder.</summary>
+    private sealed class GameApi : IProviderGameApi
+    {
+        public Task<string?> GetGameUrlAsync(ProviderSettings provider, GameLaunch launch, CancellationToken cancellationToken) =>
+            Task.FromResult<string?>($"{provider.ApiBaseUrl}/game?token={launch.Token}&symbol={launch.Symbol}");
+
+        public Task<IReadOnlyList<ProviderGame>?> GetGamesAsync(ProviderSettings provider, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<ProviderGame>?>([new ProviderGame("vs20sunwolf", "Sun Wolf", "slots", null, true)]);
+
+        public string DemoUrl(ProviderSettings provider, string symbol, string currency, string lobbyUrl) => $"{provider.DemoBaseUrl}/demo?symbol={symbol}";
+    }
+
     private sealed class Ready(bool ready) : IRestrictions
     {
         public Task<RestrictionCheck> CheckAsync(Guid punterId, DateTimeOffset now, CancellationToken cancellationToken) =>
@@ -120,6 +216,10 @@ public sealed class CasinoRulesTests
         }
 
         public Task<GameSession?> FindSessionAsync(byte[] tokenHash, CancellationToken cancellationToken) => Task.FromResult<GameSession?>(null);
+
+        public Task<GameSession?> FindLatestSessionAsync(Guid punterId, string providerId, CancellationToken cancellationToken) => Task.FromResult<GameSession?>(null);
+
+        public Task<IReadOnlyList<RecentGame>> ListRecentGamesAsync(Guid punterId, int limit, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<RecentGame>>([]);
 
         public Task<StoredTransaction?> FindTransactionAsync(string providerId, string providerTransactionId, CancellationToken cancellationToken) => Task.FromResult<StoredTransaction?>(null);
 

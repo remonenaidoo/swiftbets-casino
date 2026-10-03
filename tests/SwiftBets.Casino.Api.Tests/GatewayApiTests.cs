@@ -1,5 +1,6 @@
 extern alias simulator;
 using System.Net;
+using Microsoft.AspNetCore.Builder;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
@@ -58,6 +59,71 @@ public sealed class GatewayApiTests : IClassFixture<GatewayApiTests.Host>
         reply.Status.ShouldBe("session_invalid");
     }
 
+    [Fact]
+    public async Task A_pragmatic_callback_from_an_allowlisted_address_reaches_the_hash_check()
+    {
+        using var client = _host.CreateClient();
+        using var request = PragmaticRequest("10.9.0.5", new() { ["userId"] = "u", ["reference"] = "r", ["amount"] = "1.00", ["hash"] = new string('0', 32) });
+
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).ShouldContain("\"error\":5");
+    }
+
+    [Fact]
+    public async Task A_correctly_signed_pragmatic_callback_from_outside_the_allowlist_is_refused()
+    {
+        using var client = _host.CreateClient();
+        var fields = new Dictionary<string, string> { ["userId"] = "u", ["reference"] = "r", ["amount"] = "1.00" };
+        fields["hash"] = PragmaticHash.Compute(fields, "pp-secret");
+        using var request = PragmaticRequest("203.0.113.9", fields);
+
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
+    private static HttpRequestMessage PragmaticRequest(string peer, Dictionary<string, string> fields)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "/providers/pragmatic/pragmatic/bet.html") { Content = new FormUrlEncodedContent(fields) };
+        request.Headers.Add(PeerAddress.Header, peer);
+        return request;
+    }
+
+    /// <summary>TestServer has no peer address; tests name one in a header the test host alone honours.</summary>
+    private sealed class PeerAddress : IStartupFilter
+    {
+        public const string Header = "X-Test-Peer";
+
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+        {
+            app.Use(async (context, inner) =>
+            {
+                if (IPAddress.TryParse(context.Request.Headers[Header], out var address))
+                {
+                    context.Connection.RemoteIpAddress = address;
+                }
+
+                await inner();
+            });
+            next(app);
+        };
+    }
+
+    private sealed class PragmaticDirectory : IProviderDirectory
+    {
+        public Task<ProviderSettings?> GetAsync(string providerId, CancellationToken cancellationToken) => Task.FromResult(providerId == "pragmatic"
+            ? new ProviderSettings("pragmatic", true, WalletModels.Seamless, "pragmatic", "pp-secret", "login", string.Empty, "http://pp.test", string.Empty, string.Empty, ["10.9.0.0/16"], null)
+            : null);
+
+        public Task<IReadOnlyList<ProviderSettings>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<bool> UpdateAsync(string providerId, ProviderUpdate update, Guid operatorId, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<bool> SetCredentialsAsync(string providerId, string? secureLogin, string? secret, Guid operatorId, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
     public sealed class Host : WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -74,6 +140,7 @@ public sealed class GatewayApiTests : IClassFixture<GatewayApiTests.Host>
             builder.UseSetting("Casino:Providers:sim-seamless:Secret", "the-secret");
             builder.UseSetting("Casino:Providers:sim-seamless:LaunchBaseUrl", "http://provider.test");
             builder.UseSetting("Casino:Reconciliation:Enabled", "false");
+            builder.UseSetting("Casino:CatalogueSync:Enabled", "false");
             builder.ConfigureServices(services =>
             {
                 services.UseTestJwt();
@@ -81,6 +148,9 @@ public sealed class GatewayApiTests : IClassFixture<GatewayApiTests.Host>
                 services.AddSingleton<IRestrictions>(new ExcludedOne(Excluded));
                 services.RemoveAll<ICasinoStore>();
                 services.AddSingleton<ICasinoStore, NoSessions>();
+                services.RemoveAll<IProviderDirectory>();
+                services.AddSingleton<IProviderDirectory, PragmaticDirectory>();
+                services.AddTransient<IStartupFilter, PeerAddress>();
             });
         }
     }
@@ -101,6 +171,10 @@ public sealed class GatewayApiTests : IClassFixture<GatewayApiTests.Host>
         public Task CreateSessionAsync(GameSession session, CancellationToken cancellationToken) => Task.CompletedTask;
 
         public Task<GameSession?> FindSessionAsync(byte[] tokenHash, CancellationToken cancellationToken) => Task.FromResult<GameSession?>(null);
+
+        public Task<GameSession?> FindLatestSessionAsync(Guid punterId, string providerId, CancellationToken cancellationToken) => Task.FromResult<GameSession?>(null);
+
+        public Task<IReadOnlyList<RecentGame>> ListRecentGamesAsync(Guid punterId, int limit, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<RecentGame>>([]);
 
         public Task<StoredTransaction?> FindTransactionAsync(string providerId, string providerTransactionId, CancellationToken cancellationToken) => Task.FromResult<StoredTransaction?>(null);
 

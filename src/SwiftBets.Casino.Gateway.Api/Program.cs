@@ -16,6 +16,13 @@ builder.AddSwiftBetsObservability("swiftbets-casino");
 builder.Services.AddSwiftBetsWeb();
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
 builder.Services.AddSwiftBetsJwtBearer(builder.Configuration);
+// Console permissions (D153): staff with the permission, or Admin; services still check every call.
+foreach (var permission in new[] { ProviderAdminEndpoints.Read, ProviderAdminEndpoints.Write })
+{
+    builder.Services.AddAuthorizationBuilder().AddPolicy(permission, p => p.RequireRole(Roles.Operator, Roles.Admin).RequireAssertion(c =>
+        c.User.IsInRole(Roles.Admin) || c.User.HasClaim("perm", permission)));
+}
+
 builder.Services.AddCasinoInfrastructure(builder.Configuration);
 builder.Services.AddCasinoApplication();
 
@@ -29,6 +36,8 @@ app.MapLaunchEndpoints();
 app.MapProviderWalletEndpoints();
 app.MapFreeSpinEndpoints();
 app.MapReconciliationEndpoints();
+app.MapPragmaticWalletEndpoints();
+app.MapProviderAdminEndpoints();
 
 await app.RunAsync();
 return 0;

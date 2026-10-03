@@ -33,6 +33,30 @@ public sealed class SimulatorTests
     [Fact]
     public void A_mixed_line_pays_nothing() => Games.SlotMultiplier(["7", "BAR", "LEMON"]).ShouldBe(0);
 
+    [Fact]
+    public void The_pragmatic_api_accepts_a_request_hashed_with_the_secret_and_carrying_the_operator_login()
+    {
+        var form = new Dictionary<string, string> { ["secureLogin"] = "swiftbets", ["symbol"] = "vs20sunwolf", ["token"] = "t" };
+        form["hash"] = PragmaticHash.Compute(form, Secret);
+
+        Pragmatic().Verify(form).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void The_pragmatic_api_refuses_another_operators_login_even_with_a_valid_hash()
+    {
+        var form = new Dictionary<string, string> { ["secureLogin"] = "someone-else", ["symbol"] = "vs20sunwolf" };
+        form["hash"] = PragmaticHash.Compute(form, Secret);
+
+        Pragmatic().Verify(form).ShouldBeFalse();
+    }
+
+    private static PragmaticSim Pragmatic()
+    {
+        var options = Options.Create(new SimulatorOptions { GatewayAddress = "http://casino:8080", Providers = { ["pragmatic"] = new SimulatedProvider { Secret = Secret, SecureLogin = "swiftbets" } } });
+        return new PragmaticSim(new PragmaticClient(new HttpClient(), options), new Ledger(Npgsql.NpgsqlDataSource.Create("Host=unused"), TimeProvider.System), new Faults(), options);
+    }
+
     private static GatewayClient Client() =>
         new(new HttpClient(), Options.Create(new SimulatorOptions { GatewayAddress = "http://casino:8080", Providers = { ["sim-seamless"] = new SimulatedProvider { Secret = Secret } } }), new Faults());
 }

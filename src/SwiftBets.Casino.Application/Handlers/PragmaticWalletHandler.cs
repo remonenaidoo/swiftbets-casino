@@ -53,11 +53,14 @@ public sealed class PragmaticWalletHandler(ICasinoStore store, WalletCallbackHan
             return Error(PragmaticError.InternalNoRetry, "Provider is switched off");
         }
 
-        if (method == "authenticate")
-        {
-            return await AuthenticateAsync(provider, form, cancellationToken);
-        }
+        // Every method below is reached only after the hash check; authenticate is the one that names its player by token.
+        return Methods.Contains(method) && method.Equals("authenticate", StringComparison.Ordinal)
+            ? await AuthenticateAsync(provider, form, cancellationToken)
+            : await PlayerCallAsync(provider, method, form, cancellationToken);
+    }
 
+    private async Task<string> PlayerCallAsync(ProviderSettings provider, string method, IReadOnlyDictionary<string, string> form, CancellationToken cancellationToken)
+    {
         if (!Guid.TryParse(Get(form, "userId"), out var punterId))
         {
             return Error(PragmaticError.PlayerNotFound, "Player not found");
